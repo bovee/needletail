@@ -1,14 +1,13 @@
 #![crate_name = "needletail"]
 
-use std::str;
-use std::string;
-use std::path::Path;
-use std::fs::File;
-use std::io::Read;
-use std::borrow::Cow;
+#[macro_use]
+extern crate nom;
 
 pub mod fastx;
 pub mod kmer;
+
+use std::str;
+use std::borrow::Cow;
 
 fn printcow(ckmer: Cow<[u8]>) {
     match ckmer {
@@ -38,11 +37,11 @@ fn main() {
 //    cowstring = kmer::canonical(Cow::Borrowed(b"TAGT"));
 //    printcow(cowstring);
 
-    for kmer in kmer::Kmer::new(b"AGCA\nCT", 2, true) { //.filter(|kmer| !kmer.contains(&('N' as u8))) {
-        println!("??");
-        printcow(kmer.clone());
-        printcow(kmer::canonical(kmer));
-    }
+//    for kmer in kmer::Kmer::new(b"AGCA\nCT", 2, true) { //.filter(|kmer| !kmer.contains(&('N' as u8))) {
+//        println!("??");
+//        printcow(kmer.clone());
+//        printcow(kmer::canonical(kmer));
+//    }
 
 //    let path = Path::new("./test.fa");
 //    let mut file = match File::open(&path) {

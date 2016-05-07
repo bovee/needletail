@@ -1,27 +1,19 @@
 #!/usr/bin/env python
 """
-
-TODO: try to run through pyjs translator: http://pyjs.org/Translator.html
+Sniffing functions for FASTA/FASTQ files
 """
 from __future__ import print_function, division
-import gzip  # TODO: not supported in pyjs (but is it necessary?)
+import gzip
+import os
 import re
-import sys
-from collections import Counter  # TODO: not supported in pyjs
-
-
-class NeedletailException(Exception):
-    pass
+from collections import Counter
 
 
 def sniff_file(filename, compress=None):
-    if filename is None:
-        if compress is None:
-            start = sys.stdin.read(1)
-            data = sys.stdin.read(1000000)
-        elif compress == 'gzip':
-            raise NotImplementedError('Can\'t read GZ from stdin')
-    elif compress is None:
+    if os.path.getsize(filename) < 35:
+        return {'file_type': 'bad', 'err': ''}
+
+    if compress is None:
         with open(filename, 'r') as f:
             start = f.read(1)
             data = f.read(1000000)
@@ -35,31 +27,27 @@ def sniff_file(filename, compress=None):
         # it was a gzip file, try opening it that way
         return sniff_file(filename, 'gzip')
     else:
-        status = sniff(start, data)
+        # scan through the file and get ids/seq_counts (and quality info)
+        if start == '>':
+            seq_count, ids, status = read_fasta(data)
+        elif start == '@':
+            seq_count, ids, status = read_fastq(data)
+        else:
+            return {'file_type': 'bad', 'msg': 'Not a valid FASTA or FASTQ file'}
+
+        num_recs = len(ids)
+        if num_recs < 1:
+            return {'file_type': 'bad', 'msg': 'No records found'}
+        elif sum(seq_count.values()) < 1:
+            return {'file_type': 'bad', 'msg': 'No basepairs found'}
+        status.update(sniff_bases(seq_count, num_recs))
+        status.update(sniff_ids(ids))
+
         if compress == 'gzip':
             status['compression'] = 'gzip'
         else:
             status['compression'] = 'none'
         return status
-
-
-def sniff(start, data):
-    # scan through the file and get ids/seq_counts (and quality info)
-    if start == '>':
-        seq_count, ids, status = read_fasta(data)
-    elif start == '@':
-        seq_count, ids, status = read_fastq(data)
-    else:
-        raise NeedletailException('Not a valid FASTA or FASTQ file')
-
-    num_recs = len(ids)
-    if num_recs < 1 or sum(seq_count.values()) < 1:
-        return {'file_type': 'bad'}
-
-    status.update(sniff_bases(seq_count, num_recs))
-    status.update(sniff_ids(ids))
-
-    return status
 
 
 def sniff_bases(seq_count, num_recs=1.0):
@@ -133,6 +121,7 @@ def sniff_ids(ids):
     singled = [i.replace('2', '1') for i in ids]
     status['interleaved'] = all(singled[2 * i] == singled[2 * i + 1] for
                                 i in range(len(singled) // 2)) and len(ids) > 1
+    return status
 
     # TODO: determine id type? (sequencer, assembler, database ...)
 
@@ -201,8 +190,6 @@ fastq_re = re.compile(r"""
                       (?:\n@|\Z)
                       """, re.DOTALL + re.VERBOSE)
 
-# TODO: expression for handling multiline FASTQ?
-
 
 def read_fasta(data):
     ids = []
@@ -221,7 +208,6 @@ def read_fastq(data):
     seq_count = Counter()
     for match in fastq_re.finditer(data):
         rec = match.groupdict()
-        print(rec)
         if rec['id'] != rec['id2']:
             # once the qual_ids don't match, we always report `nonmatch`
             if rec['id2'] == '' and status.get('qual_ids') != 'nonmatch':
