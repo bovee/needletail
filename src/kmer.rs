@@ -81,16 +81,16 @@ pub fn normalize<'a>(seq: Cow<'a, [u8]>, iupac: bool) -> Cow<'a, [u8]> {
                 good_char = true;
                 c.0 as u8
             },
-            c @ ('b', true) => 'B' as u8,
-            c @ ('d', true) => 'D' as u8,
-            c @ ('h', true) => 'H' as u8,
-            c @ ('v', true) => 'V' as u8,
-            c @ ('r', true) => 'R' as u8,
-            c @ ('y', true) => 'Y' as u8,
-            c @ ('s', true) => 'S' as u8,
-            c @ ('w', true) => 'W' as u8,
-            c @ ('k', true) => 'K' as u8,
-            c @ ('m', true) => 'M' as u8,
+            ('b', true) => 'B' as u8,
+            ('d', true) => 'D' as u8,
+            ('h', true) => 'H' as u8,
+            ('v', true) => 'V' as u8,
+            ('r', true) => 'R' as u8,
+            ('y', true) => 'Y' as u8,
+            ('s', true) => 'S' as u8,
+            ('w', true) => 'W' as u8,
+            ('k', true) => 'K' as u8,
+            ('m', true) => 'M' as u8,
             ('\r', _) | ('\n', _) | ('\t', _) => {
                 original_was_bad = true;
                 // continue to prevent pushing whitespace into the normalized form
@@ -191,7 +191,7 @@ impl<'a> Iterator for Kmer<'a> {
         match self.start_pos {
             // the sequence is exhausted, return None as the Iterator sentinel value
             None => None,
-            Some(mut pos) => {
+            Some(pos) => {
                 // check if we have enough "physical" space for one more kmer
                 if pos > self.buffer.len() - self.k {
                     self.start_pos = None;

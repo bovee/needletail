@@ -5,7 +5,7 @@ use std::env;
 use needletail::{fastx, kmer};
 
 // fn main() {
-//     let filename: &str = env::args().nth(1);
+//     let filename: String = env::args().nth(1);
 // 
 //     let mut n_total = 0;
 //     let mut n_canonical = 0;
@@ -23,10 +23,10 @@ use needletail::{fastx, kmer};
 // }
 
 fn main() {
-    let filename: String = env::args().nth(1).unwrap();
+    let filename: String = env::args().nth(1);
 
     let mut n_bases = 0;
-    fastx::fastx_file(&filename[..], |seq| {
+    fastx::fastx_file(filename, |seq| {
         n_bases += seq.1.len();
     });
     println!("{:?}", n_bases);

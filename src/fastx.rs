@@ -38,7 +38,7 @@ fn find_pos(buffer: &[u8], search: &[u8]) -> Option<usize> {
 fn fasta_record<'a>(input: &'a [u8], last: bool) -> IResult<&[u8], SeqRecord<'a>> {
     let mut pos = 0;
     let id;
-    match find_pos(&input[pos..], &['\n' as u8]) {
+    match find_pos(&input, &['\n' as u8]) {
         None => return IResult::Incomplete(Needed::Unknown),
         Some(pos_end) => match str::from_utf8(&input[pos + 1..pos_end]) {
             Ok(v) => {
@@ -86,11 +86,12 @@ fn fastq_record<'a>(input: &'a [u8]) -> IResult<&[u8], SeqRecord<'a>> {
         Some(pos_end) => pos += pos_end + 1,
     };
 
+
     let end_len = pos + seq.len();
     if end_len > input.len() {
         IResult::Incomplete(Needed::Size(end_len - input.len()))
     } else {
-        IResult::Done(&input[end_len..], (id, seq, Some(&input[pos..end_len])))
+        IResult::Done(&input[end_len + 1..], (id, seq, Some(&input[pos..end_len])))
     }
 }
 
@@ -110,9 +111,13 @@ fn test_parsers() {
     let res = ("test", &b"agct"[..], None);
     assert_eq!(parsed, IResult::Done(no_more, res));
 
+    let parsed = fasta_record(b">test2\nagct", true);
+    let res = ("test2", &b"agct"[..], None);
+    assert_eq!(parsed, IResult::Done(&b""[..], res));
+
     let parsed = fastq_record(b"@test\nagct\n+test\nAAAA\n");
     let res = ("test", &b"agct"[..], Some(&b"AAAA"[..]));
-    assert_eq!(parsed, IResult::Done(&b"\n"[..], res));
+    assert_eq!(parsed, IResult::Done(&b""[..], res));
 }
 
 
@@ -209,7 +214,7 @@ impl<'a, 'x> Consumer<&'a [u8], (), (), Move> for FASTXConsumer<'x> {
                     },
                     IResult::Done(remaining_sl, seq) => {
                         (self.callback)(seq);
-                        if remaining_sl.len() == 0 {
+                        if remaining_sl.len() <= 1 {
                             self.state = FASTXState::Done;
                         }
                         self.consumer_state =  ConsumerState::Continue(Move::Consume(sl.len() - remaining_sl.len()));

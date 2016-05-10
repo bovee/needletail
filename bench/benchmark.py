@@ -10,31 +10,12 @@ implementation below using the %timeit Ipython magic (times in sec)
 
 Both give identical counts on the files tested (and printing kmers out
 and diff'ing the results gives no difference)
-
-```rust
-extern crate needletail;
-use std::string::String;
-use needletail::{fastx, kmer};
-
-fn main() {
-    let mut n_total = 0;
-    let mut n_canonical = 0;
-    fastx::fastx_file("../../../Downloads/20160428.curated.loci.fasta", |seq| {
-        for k in kmer::Kmer::new(seq.1, 4, true) {
-            let l = kmer::canonical(k).into_owned();
-            // println!("{:}", String::from_utf8_lossy(&l));
-            if l == &b"CAGC"[..] {
-                n_canonical += 1;
-            }
-            n_total += 1;
-        }
-    });
-    println!("{:?} {:?}", n_total, n_canonical);
-}
 ```
 
 """
 from __future__ import print_function
+import sys
+
 from Bio.SeqIO import parse
 from Bio.Seq import reverse_complement
 
@@ -58,11 +39,12 @@ def slid_win(seq, size=4, overlapping=True):
                 yield buf
                 buf = ''
 
+filename = sys.argv[1]
 
 n_total = 0
 n_canonical = 0
 
-for s in parse('test_file.fa', 'fasta'):
+for s in parse(filename, 'fasta'):
     uppercase_seq = str(s.upper().seq)
     for kmer in slid_win(uppercase_seq, 4):
         canonical = min(kmer, reverse_complement(kmer))
