@@ -4,14 +4,10 @@ Unscientific benchmarking of this versus the --release rust
 implementation below using the %timeit Ipython magic (times in sec)
 
     n_kmers,  py_runtime, rust_runtime
-    736870,   1.34,       0.0965
-    3988647,  6.43,       0.417
-    99224925, 161,        10.2
+    6594204,  14.4,       0.578
 
 Both give identical counts on the files tested (and printing kmers out
 and diff'ing the results gives no difference)
-```
-
 """
 from __future__ import print_function
 import sys
@@ -44,7 +40,7 @@ filename = sys.argv[1]
 n_total = 0
 n_canonical = 0
 
-for s in parse(filename, 'fasta'):
+for s in parse(filename, 'fastq'):
     uppercase_seq = str(s.upper().seq)
     for kmer in slid_win(uppercase_seq, 4):
         canonical = min(kmer, reverse_complement(kmer))
