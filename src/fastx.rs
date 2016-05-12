@@ -12,6 +12,7 @@
 //!
 //! See: https://github.com/emk/rust-streaming
 
+use memchr::{memchr, memchr2};
 use std::str;
 use nom::{Err, ErrorKind, Input, IResult, Needed, Move};
 use nom::{FileProducer, MemProducer, Consumer, ConsumerState, Producer};
@@ -22,23 +23,10 @@ use nom::{FileProducer, MemProducer, Consumer, ConsumerState, Producer};
 ///   seq.2 - an optional set of quality scores for the sequence
 pub type SeqRecord<'a> = (&'a str, &'a [u8], Option<&'a [u8]>);
 
-fn find_pos(buffer: &[u8], search: &[u8]) -> Option<usize> {
-    //! Simple linear search through `buffer` looking for `search`
-    // TODO: there has to be something like this built-in? can't find it though :/
-    // TODO: (and in theory lots of room for optimization of longer
-    // string cases here; but we should be okay for len 1)
-    for (i, byte) in buffer.windows(search.len()).enumerate() {
-        if *byte == *search {
-            return Some(i);
-        }
-    }
-    None
-}
-
 fn fasta_record<'a>(input: &'a [u8], last: bool) -> IResult<&[u8], SeqRecord<'a>> {
     let mut pos = 0;
     let id;
-    match find_pos(&input, &['\n' as u8]) {
+    match memchr(b'\n', &input) {
         None => return IResult::Incomplete(Needed::Unknown),
         Some(pos_end) => match str::from_utf8(&input[pos + 1..pos_end]) {
             Ok(v) => {
@@ -49,7 +37,7 @@ fn fasta_record<'a>(input: &'a [u8], last: bool) -> IResult<&[u8], SeqRecord<'a>
         },
     };
 
-    match find_pos(&input[pos..], &['\n' as u8, '>' as u8]) {
+    match memchr2(b'\n', b'>', &input[pos..]) {
         None => match last {
             false => IResult::Incomplete(Needed::Unknown),
             true => IResult::Done(&[], (id, &input[pos..input.len()], None)),
@@ -61,7 +49,7 @@ fn fasta_record<'a>(input: &'a [u8], last: bool) -> IResult<&[u8], SeqRecord<'a>
 fn fastq_record<'a>(input: &'a [u8]) -> IResult<&[u8], SeqRecord<'a>> {
     let mut pos = 0;
     let id;
-    match find_pos(&input, &['\n' as u8]) {
+    match memchr(b'\n', &input) {
         None => return IResult::Incomplete(Needed::Unknown),
         Some(pos_end) => match str::from_utf8(&input[pos + 1..pos_end]) {
             Ok(v) => {
@@ -73,7 +61,7 @@ fn fastq_record<'a>(input: &'a [u8]) -> IResult<&[u8], SeqRecord<'a>> {
     };
 
     let seq;
-    match find_pos(&input[pos..], &['\n' as u8, '+' as u8]) {
+    match memchr2(b'\n', b'+', &input[pos..]) {
         None => return IResult::Incomplete(Needed::Unknown),
         Some(pos_end) => {
             seq = &input[pos..pos + pos_end];
@@ -81,7 +69,7 @@ fn fastq_record<'a>(input: &'a [u8]) -> IResult<&[u8], SeqRecord<'a>> {
         },
     };
 
-    match find_pos(&input[pos..], &['\n' as u8]) {
+    match memchr(b'\n', &input[pos..]) {
         None => return IResult::Incomplete(Needed::Unknown),
         Some(pos_end) => pos += pos_end + 1,
     };
@@ -160,6 +148,9 @@ impl<'a, 'x> Consumer<&'a [u8], (), (), Move> for FASTXConsumer<'x> {
                 // TODO: empty file error
                 self.consumer_state = ConsumerState::Error(());
                 self.state = FASTXState::Done;
+            },
+            (_, Input::Error) => {
+                panic!("Error reading records; buffer may be too small");
             },
             (&FASTXState::Start, Input::Element(sl)) | (&FASTXState::Start, Input::Eof(Some(sl))) => {
                 match sl[0] as char {
@@ -286,7 +277,7 @@ fn test_callback() {
             },
             1 => {
                 assert_eq!(seq.0, "test2");
-                assert_eq!(seq.1, &b"TAGC\n"[..]);
+                assert_eq!(seq.1, &b"TAGC"[..]);
                 assert_eq!(seq.2, None);
             },
             _ => {

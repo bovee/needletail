@@ -1,6 +1,7 @@
 #![crate_name = "needletail"]
 
 #[macro_use]
+extern crate memchr;
 extern crate nom;
 
 pub mod fastx;
