@@ -2,7 +2,7 @@
 
 Needletail is a MIT licensed, minimal-copying FASTA/FASTQ parser and k-mer processing library.
 
-The goal is to write a fast *and* well-tested set of functions that more-specialized bioinformatics programs can use. Right now Needletail is faster than the `readfq` C library at parsing FASTX files and much (i.e. 25 times) faster than an equivalent Python implementation at k-mer counting.
+The goal is to write a fast *and* well-tested set of functions that more-specialized bioinformatics programs can use. Needletail's goal is to be as fast as the `readfq` C library at parsing FASTX files and much (i.e. 25 times) faster than equivalent Python implementations at k-mer counting.
 
 # Example
 

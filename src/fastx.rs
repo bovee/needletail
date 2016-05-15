@@ -5,7 +5,7 @@
 //!
 //! These functions are designed to take callbacks to process the FASTX records
 //! they read. It would be nice to present a FASTX Iterator that downstream users
-//! can use at some point, but this is only possible for in-memory data (using 
+//! can use at some point, but this is only possible for in-memory data (using
 //! MemProducer from nom) because otherwise the lifetime of each record is linked
 //! to what part of the file we're reading and Rust doesn't support "streaming
 //! iterators" otherwise. Maybe some day.
@@ -14,14 +14,21 @@
 
 use memchr::{memchr, memchr2};
 use std::str;
-use nom::{Err, ErrorKind, Input, IResult, Needed, Move};
-use nom::{FileProducer, MemProducer, Consumer, ConsumerState, Producer};
+use nom::{Err, ErrorKind, IResult, Input, Move, Needed};
+use nom::{Consumer, ConsumerState, FileProducer, MemProducer, Producer};
 
 /// A generic FASTX record containing:
 ///   seq.0 - an id
 ///   seq.1 - the sequence itself
 ///   seq.2 - an optional set of quality scores for the sequence
-pub type SeqRecord<'a> = (&'a str, &'a [u8], Option<&'a [u8]>);
+pub type SeqRecord<'a> = (&'a str, Vec<u8>, Option<&'a [u8]>);
+
+fn strip_whitespace(seq: &[u8]) -> Vec<u8> {
+    seq.iter()
+       .filter(|&n| *n != b'\r' && *n != b'\n')
+       .map(|n| n.clone())
+       .collect::<Vec<u8>>()
+}
 
 fn fasta_record<'a>(input: &'a [u8], last: bool) -> IResult<&[u8], SeqRecord<'a>> {
     let mut pos = 0;
@@ -33,16 +40,20 @@ fn fasta_record<'a>(input: &'a [u8], last: bool) -> IResult<&[u8], SeqRecord<'a>
                 id = v;
                 pos += pos_end + 1;
             },
-            Err(_) => return IResult::Error(Err::Code(ErrorKind::IsNotStr)), //"Invalid UTF-8 in FASTA id: {}"
+            // "Invalid UTF-8 in FASTA id: {}"
+            Err(_) => return IResult::Error(Err::Code(ErrorKind::IsNotStr)),
         },
     };
 
     match memchr2(b'\n', b'>', &input[pos..]) {
         None => match last {
             false => IResult::Incomplete(Needed::Unknown),
-            true => IResult::Done(&[], (id, &input[pos..input.len()], None)),
+            true => IResult::Done(&[], (id, strip_whitespace(&input[pos..input.len()]), None)),
         },
-        Some(pos_end) => IResult::Done(&input[pos + pos_end + 1..], (id, &input[pos..pos + pos_end], None)),
+        Some(pos_end) => {
+            IResult::Done(&input[pos + pos_end + 1..],
+                          (id, strip_whitespace(&input[pos..pos + pos_end]), None))
+        },
     }
 }
 
@@ -56,7 +67,8 @@ fn fastq_record<'a>(input: &'a [u8]) -> IResult<&[u8], SeqRecord<'a>> {
                 id = v;
                 pos += pos_end + 1;
             },
-            Err(_) => return IResult::Error(Err::Code(ErrorKind::IsNotStr)), //"Invalid UTF-8 in FASTA id: {}"
+            // "Invalid UTF-8 in FASTA id: {}"
+            Err(_) => return IResult::Error(Err::Code(ErrorKind::IsNotStr)),
         },
     };
 
@@ -64,7 +76,7 @@ fn fastq_record<'a>(input: &'a [u8]) -> IResult<&[u8], SeqRecord<'a>> {
     match memchr2(b'\n', b'+', &input[pos..]) {
         None => return IResult::Incomplete(Needed::Unknown),
         Some(pos_end) => {
-            seq = &input[pos..pos + pos_end];
+            seq = input[pos..pos + pos_end].to_vec();
             pos += pos_end + 1;
         },
     };
@@ -86,25 +98,25 @@ fn fastq_record<'a>(input: &'a [u8]) -> IResult<&[u8], SeqRecord<'a>> {
 #[test]
 fn test_parsers() {
     let parsed = fasta_record(b">\n", true);
-    let res = ("", &b""[..], None);
+    let res = ("", b"".to_vec(), None);
     assert_eq!(parsed, IResult::Done(&b""[..], res));
-    
+
     let no_more = &b">"[..];
 
     let parsed = fasta_record(b">\n\n>", false);
-    let res = ("", &b""[..], None);
+    let res = ("", b"".to_vec(), None);
     assert_eq!(parsed, IResult::Done(no_more, res));
 
     let parsed = fasta_record(b">test\nagct\n>", false);
-    let res = ("test", &b"agct"[..], None);
+    let res = ("test", b"agct".to_vec(), None);
     assert_eq!(parsed, IResult::Done(no_more, res));
 
     let parsed = fasta_record(b">test2\nagct", true);
-    let res = ("test2", &b"agct"[..], None);
+    let res = ("test2", b"agct".to_vec(), None);
     assert_eq!(parsed, IResult::Done(&b""[..], res));
 
     let parsed = fastq_record(b"@test\nagct\n+test\nAAAA\n");
-    let res = ("test", &b"agct"[..], Some(&b"AAAA"[..]));
+    let res = ("test", b"agct".to_vec(), Some(&b"AAAA"[..]));
     assert_eq!(parsed, IResult::Done(&b""[..], res));
 }
 
@@ -117,14 +129,16 @@ enum FASTXState {
     Done,
 }
 
-struct FASTXConsumer<'x>  {
+struct FASTXConsumer<'x> {
     consumer_state: ConsumerState<(), (), Move>,
     state: FASTXState,
     callback: &'x mut for<'a> FnMut(SeqRecord<'a>) -> (),
 }
 
 impl<'x> FASTXConsumer<'x> {
-    pub fn new<F>(callback: &'x mut F) -> FASTXConsumer<'x> where F: for<'a> FnMut(SeqRecord<'a>) -> ()  {
+    pub fn new<F>(callback: &'x mut F) -> FASTXConsumer<'x>
+        where F: for<'a> FnMut(SeqRecord<'a>) -> (),
+    {
         FASTXConsumer {
             consumer_state: ConsumerState::Continue(Move::Consume(0)),
             state: FASTXState::Start,
@@ -144,7 +158,8 @@ impl<'a, 'x> Consumer<&'a [u8], (), (), Move> for FASTXConsumer<'x> {
                 // TODO: read after close error
                 self.consumer_state = ConsumerState::Error(());
             },
-            (_, Input::Empty) | (_, Input::Eof(None)) => {
+            (_, Input::Empty) |
+            (_, Input::Eof(None)) => {
                 // TODO: empty file error
                 self.consumer_state = ConsumerState::Error(());
                 self.state = FASTXState::Done;
@@ -152,8 +167,9 @@ impl<'a, 'x> Consumer<&'a [u8], (), (), Move> for FASTXConsumer<'x> {
             (_, Input::Error) => {
                 panic!("Error reading records; buffer may be too small");
             },
-            (&FASTXState::Start, Input::Element(sl)) | (&FASTXState::Start, Input::Eof(Some(sl))) => {
-                match sl[0] as char {
+            (&FASTXState::Start, Input::Element(slice)) |
+            (&FASTXState::Start, Input::Eof(Some(slice))) => {
+                match slice[0] as char {
                     '>' => {
                         self.consumer_state = ConsumerState::Continue(Move::Consume(0usize));
                         self.state = FASTXState::FASTA;
@@ -170,12 +186,12 @@ impl<'a, 'x> Consumer<&'a [u8], (), (), Move> for FASTXConsumer<'x> {
                 }
             },
             (&FASTXState::FASTA, inp) => {
-                let (sl, last_record) = match inp {
-                    Input::Element(sl) => (sl, false),
-                    Input::Eof(Some(sl)) => (sl, true),
+                let (slice, last_record) = match inp {
+                    Input::Element(slice) => (slice, false),
+                    Input::Eof(Some(slice)) => (slice, true),
                     _ => panic!("Should never happen"),
                 };
-                match fasta_record(sl, last_record) {
+                match fasta_record(slice, last_record) {
                     IResult::Error(_) => {
                         // TODO: error report
                         self.consumer_state = ConsumerState::Error(());
@@ -184,17 +200,20 @@ impl<'a, 'x> Consumer<&'a [u8], (), (), Move> for FASTXConsumer<'x> {
                     IResult::Incomplete(n) => {
                         self.consumer_state = ConsumerState::Continue(Move::Await(n));
                     },
-                    IResult::Done(remaining_sl, seq) => {
+                    IResult::Done(remaining_slice, seq) => {
                         (self.callback)(seq);
-                        if remaining_sl.len() == 0 {
+                        if remaining_slice.len() == 0 {
                             self.state = FASTXState::Done;
                         }
-                        self.consumer_state =  ConsumerState::Continue(Move::Consume(sl.len() - remaining_sl.len()));
-                    }
+                        self.consumer_state =
+                            ConsumerState::Continue(Move::Consume(slice.len() -
+                                                                  remaining_slice.len()));
+                    },
                 }
             },
-            (&FASTXState::FASTQ, Input::Element(sl)) | (&FASTXState::FASTQ, Input::Eof(Some(sl))) => {
-                match fastq_record(sl) {
+            (&FASTXState::FASTQ, Input::Element(slice)) |
+            (&FASTXState::FASTQ, Input::Eof(Some(slice))) => {
+                match fastq_record(slice) {
                     IResult::Error(_) => {
                         // TODO: error report
                         self.consumer_state = ConsumerState::Error(());
@@ -203,12 +222,14 @@ impl<'a, 'x> Consumer<&'a [u8], (), (), Move> for FASTXConsumer<'x> {
                     IResult::Incomplete(n) => {
                         self.consumer_state = ConsumerState::Continue(Move::Await(n));
                     },
-                    IResult::Done(remaining_sl, seq) => {
+                    IResult::Done(remaining_slice, seq) => {
                         (self.callback)(seq);
-                        if remaining_sl.len() <= 1 {
+                        if remaining_slice.len() <= 1 {
                             self.state = FASTXState::Done;
                         }
-                        self.consumer_state =  ConsumerState::Continue(Move::Consume(sl.len() - remaining_sl.len()));
+                        self.consumer_state =
+                            ConsumerState::Continue(Move::Consume(slice.len() -
+                                                                  remaining_slice.len()));
                     },
                 }
             },
@@ -218,7 +239,9 @@ impl<'a, 'x> Consumer<&'a [u8], (), (), Move> for FASTXConsumer<'x> {
 }
 
 
-pub fn fastx_bytes<'b, F>(bytes: &'b [u8], ref mut callback: F) where F: for<'a> FnMut(SeqRecord<'a>) -> () {
+pub fn fastx_bytes<'b, F>(bytes: &'b [u8], ref mut callback: F)
+    where F: for<'a> FnMut(SeqRecord<'a>) -> (),
+{
     //! Parse a collection of bytes into FASTX records and calls `callback` on each.
     //!
     let mut producer = MemProducer::new(bytes, 10000000);
@@ -229,7 +252,9 @@ pub fn fastx_bytes<'b, F>(bytes: &'b [u8], ref mut callback: F) where F: for<'a>
     }
 }
 
-pub fn fastx_file<F>(filename: &str, ref mut callback: F) where F: for<'a> FnMut(SeqRecord<'a>) -> () {
+pub fn fastx_file<F>(filename: &str, ref mut callback: F)
+    where F: for<'a> FnMut(SeqRecord<'a>) -> (),
+{
     //! Parse a file (given its name) into FASTX records and calls `callback` on each.
     //!
     //! Note there's currently a bug where the chunk size of 10Mb here prevents
@@ -252,17 +277,17 @@ fn test_callback() {
         match i {
             0 => {
                 assert_eq!(seq.0, "test");
-                assert_eq!(seq.1, &b"AGCT"[..]);
+                assert_eq!(&seq.1[..], &b"AGCT"[..]);
                 assert_eq!(seq.2, None);
             },
             1 => {
                 assert_eq!(seq.0, "test2");
-                assert_eq!(seq.1, &b"GATC"[..]);
+                assert_eq!(&seq.1[..], &b"GATC"[..]);
                 assert_eq!(seq.2, None);
             },
             _ => {
                 assert!(false);
-            }
+            },
         }
         i += 1;
     });
@@ -272,18 +297,47 @@ fn test_callback() {
         match i {
             0 => {
                 assert_eq!(seq.0, "test");
-                assert_eq!(seq.1, &b"AGCTGATCGA"[..]);
+                assert_eq!(&seq.1[..], b"AGCTGATCGA");
                 assert_eq!(seq.2, None);
             },
             1 => {
                 assert_eq!(seq.0, "test2");
-                assert_eq!(seq.1, &b"TAGC"[..]);
+                assert_eq!(&seq.1[..], b"TAGC");
                 assert_eq!(seq.2, None);
             },
             _ => {
                 assert!(false);
-            }
+            },
         }
         i += 1;
     });
+}
+
+fn quality_mask<'a>(seq_rec: SeqRecord<'a>, ref score: u8) -> Vec<u8> {
+    match seq_rec.2 {
+        None => seq_rec.1,
+        Some(quality) => {
+            // could maybe speed this up by doing a copy of base and then
+            // iterating though qual and masking?
+            seq_rec.1
+                   .iter()
+                   .zip(quality.iter())
+                   .map(|(base, qual)| {
+                       if qual < score {
+                           b'N'
+                       } else {
+                           base.clone()
+                       }
+                   })
+                   .collect()
+
+        },
+    }
+}
+
+#[test]
+fn test_quality_mask() {
+    let seq_rec = ("", b"AGCT".to_vec(), Some(&b"AAA0"[..]));
+    let filtered = quality_mask(seq_rec, '5' as u8);
+    assert_eq!(&filtered[..], &b"AGCN"[..]);
 }
