@@ -14,7 +14,7 @@
 
 use memchr::{memchr, memchr2};
 use std::str;
-use nom::{Err, ErrorKind, IResult, Input, Move, Needed};
+use nom::{ErrorKind, IResult, Input, Move, Needed};
 use nom::{Consumer, ConsumerState, FileProducer, MemProducer, Producer};
 
 /// A generic FASTX record containing:
@@ -41,7 +41,7 @@ fn fasta_record<'a>(input: &'a [u8], last: bool) -> IResult<&[u8], SeqRecord<'a>
                 pos += pos_end + 1;
             },
             // "Invalid UTF-8 in FASTA id: {}"
-            Err(_) => return IResult::Error(Err::Code(ErrorKind::IsNotStr)),
+            Err(_) => return IResult::Error(ErrorKind::IsNotStr),
         },
     };
 
@@ -68,7 +68,7 @@ fn fastq_record<'a>(input: &'a [u8]) -> IResult<&[u8], SeqRecord<'a>> {
                 pos += pos_end + 1;
             },
             // "Invalid UTF-8 in FASTA id: {}"
-            Err(_) => return IResult::Error(Err::Code(ErrorKind::IsNotStr)),
+            Err(_) => return IResult::Error(ErrorKind::IsNotStr),
         },
     };
 

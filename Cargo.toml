@@ -5,5 +5,5 @@ authors = ["Roderick Bovee <roderick@onecodex.com>"]
 
 
 [dependencies]
-nom = { version = "~1.2.3", git = "https://github.com/bovee/nom", branch="producer_erroring" }
+nom = { version = "~2.0.0", git = "https://github.com/bovee/nom", branch="producer_erroring" }
 memchr = "0.1.11"
