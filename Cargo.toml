@@ -3,7 +3,13 @@ name = "needletail"
 version = "0.1.0"
 authors = ["Roderick Bovee <roderick@onecodex.com>"]
 
-
 [dependencies]
 nom = { version = "~2.0.0", git = "https://github.com/bovee/nom", branch="producer_erroring" }
 memchr = "0.1.11"
+
+[dev-dependencies]
+bencher = "0.1.1"
+
+[[bench]]
+name = "benchmark"
+harness = false
