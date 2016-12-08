@@ -7,6 +7,7 @@ extern crate memchr;
 
 pub mod fastx;
 pub mod kmer;
+pub mod bitkmer;
 
 use std::str;
 use std::borrow::Cow;

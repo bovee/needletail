@@ -58,6 +58,10 @@ fn fasta_record<'a>(input: &'a [u8], last: bool) -> IResult<&[u8], SeqRecord<'a>
 }
 
 fn fastq_record<'a>(input: &'a [u8]) -> IResult<&[u8], SeqRecord<'a>> {
+    if input[0] != b'@' {
+        // TODO: return IResult::Error();
+        panic!("Invalid FASTQ record");  // before line ...?
+    }
     let mut pos = 0;
     let id;
     match memchr(b'\n', &input) {
