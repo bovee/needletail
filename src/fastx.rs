@@ -293,7 +293,7 @@ fn test_callback() {
     });
 
     i = 0;
-    fastx_file("./test.fa", |seq| {
+    fastx_file("./tests/data/test.fa", |seq| {
         match i {
             0 => {
                 assert_eq!(seq.0, "test");
