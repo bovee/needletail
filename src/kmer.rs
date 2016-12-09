@@ -170,17 +170,124 @@ fn can_minimize() {
 //    iter.filter(|kmer| kmer.contains(&('N' as u8)) || kmer.contains(&('n' as u8)))
 // }
 
+fn is_good_base(chr: u8) -> bool {
+    match chr as char {
+        'a' | 'c' | 'g' | 't' | 'A' | 'C' | 'G' | 'T' => true,
+        _ => false,
+    }
+}
+
 fn has_no_n<'a>(seq: &'a [u8]) -> bool {
     //! Determines if a sequence has any non-primary four bases
     //! characters in it
-    seq.iter().all(|n| match *n as char {
-        'a' | 'c' | 'g' | 't' | 'A' | 'C' | 'G' | 'T' => true,
-        _ => false,
-    })
+    seq.iter().all(|n| is_good_base(*n))
 }
 
 #[test]
 fn can_detect_no_n() {
     assert!(has_no_n(b"AAGT"));
     assert!(!has_no_n(b"NAGT"));
+}
+
+pub struct NuclKmer<'a> {
+    k: u8,
+    start_pos: usize,
+    buffer: &'a [u8],
+}
+
+fn update_position(start_pos: &mut usize, k: u8, buffer: &[u8], initial: bool) -> bool {
+    // check if we have enough "physical" space for one more kmer
+    if *start_pos + k as usize > buffer.len() {
+        return false;
+    }
+
+    let mut kmer_len = (k - 1) as usize;
+    let mut stop_len = k as usize;
+    if initial {
+        kmer_len = 0;
+        stop_len = (k - 1) as usize;
+    }
+
+    while kmer_len < stop_len {
+        if is_good_base(buffer[*start_pos + kmer_len]) {
+            kmer_len += 1;
+        } else {
+            kmer_len = 0;
+            *start_pos += kmer_len + 1;
+            if *start_pos + k as usize > buffer.len() {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+impl<'a> NuclKmer<'a> {
+    //! A kmer-izer for a nucleotide/amino acid sequence; returning slices to the original data
+    pub fn new(buffer: &'a [u8], k: u8) -> NuclKmer<'a> {
+        let mut start_pos = 0;
+        update_position(&mut start_pos, k, buffer, true);
+        NuclKmer {
+            k: k,
+            start_pos: start_pos,
+            buffer: buffer,
+        }
+    }
+}
+
+impl<'a> Iterator for NuclKmer<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<&'a [u8]> {
+        if !update_position(&mut self.start_pos, self.k, self.buffer, false) {
+            return None;
+        }
+
+        let result = Some(&self.buffer[self.start_pos..self.start_pos + self.k as usize]);
+        self.start_pos += 1;
+        result
+    }
+}
+
+
+#[test]
+fn can_kmerize() {
+    // test general function
+    let mut i = 0;
+    for k in NuclKmer::new(b"AGCT", 1) {
+        match i {
+            0 => assert_eq!(k, &b"A"[..]),
+            1 => assert_eq!(k, &b"G"[..]),
+            2 => assert_eq!(k, &b"C"[..]),
+            3 => assert_eq!(k, &b"T"[..]),
+            _ => assert!(false),
+        }
+        i += 1;
+    }
+
+    // test that we skip over N's
+    i = 0;
+    for k in NuclKmer::new(b"ACNGT", 2) {
+        match i {
+            0 => assert_eq!(k, &b"AC"[..]),
+            1 => assert_eq!(k, &b"GT"[..]),
+            _ => assert!(false),
+        }
+        i += 1;
+    }
+
+    // test that we skip over N's and handle short kmers
+    i = 0;
+    for k in NuclKmer::new(b"ACNG", 2) {
+        match i {
+            0 => assert_eq!(k, &b"AC"[..]),
+            _ => assert!(false),
+        }
+        i += 1;
+    }
+
+    // test that the minimum length works
+    for k in NuclKmer::new(b"AC", 2) {
+        assert_eq!(k, &b"AC"[..]);
+    }
 }
