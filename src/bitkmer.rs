@@ -53,7 +53,7 @@ impl<'a> Iterator for BitKmerIter<'a> {
 
     fn next(&mut self) -> Option<BitKmer> {
         self.pos += 1;
-        if self.pos > self.buffer.len() {
+        if self.pos >= self.buffer.len() {
             return None;
         }
         self.cur_kmer = fast_extend_kmer(&self.cur_kmer, &self.k, &self.buffer[self.pos]);
@@ -69,6 +69,7 @@ fn test_iterator() {
     assert_eq!(kmer_iter.next(), Some(6));
     assert_eq!(kmer_iter.next(), Some(27));
     assert_eq!(kmer_iter.next(), Some(44));
+    assert_eq!(kmer_iter.next(), None);
 }
 
 fn reverse_complement(kmer: BitKmer, k: u8) -> BitKmer {
