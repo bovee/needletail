@@ -226,3 +226,25 @@ fn test_bitmer_to_str() {
     assert_eq!(bitmer_to_str((60 as BitKmerSeq, 3)), String::from("TTA"));
     assert_eq!(bitmer_to_str((0 as BitKmerSeq, 3)), String::from("AAA"));
 }
+
+pub fn str_to_bitmer(kmer: &[u8]) -> BitKmer {
+    let k = kmer.len() as u8;
+
+    let mut bit_kmer = (0u64, k);
+    for i in 0..k {
+        fast_extend_kmer(&mut bit_kmer, &kmer[i as usize]);
+    }
+    bit_kmer
+}
+
+#[test]
+fn test_str_to_bitkmer() {
+    let mut ikmer: BitKmer = str_to_bitmer("C".as_bytes());
+    assert_eq!(ikmer.0, 1 as BitKmerSeq);
+
+    ikmer = str_to_bitmer("TTA".as_bytes());
+    assert_eq!(ikmer.0, 60 as BitKmerSeq);
+
+    ikmer = str_to_bitmer("AAA".as_bytes());
+    assert_eq!(ikmer.0, 0 as BitKmerSeq);
+}
