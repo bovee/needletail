@@ -177,7 +177,7 @@ fn is_good_base(chr: u8) -> bool {
     }
 }
 
-fn has_no_n<'a>(seq: &'a [u8]) -> bool {
+pub fn has_no_n<'a>(seq: &'a [u8]) -> bool {
     //! Determines if a sequence has any non-primary four bases
     //! characters in it
     seq.iter().all(|n| is_good_base(*n))
