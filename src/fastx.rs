@@ -12,7 +12,7 @@
 //!
 //! See: https://github.com/emk/rust-streaming
 
-use memchr::{memchr, memchr2};
+use memchr::memchr;
 use std::str;
 use nom::{ErrorKind, IResult, Input, Move, Needed};
 use nom::{Consumer, ConsumerState, FileProducer, MemProducer, Producer};
@@ -28,6 +28,26 @@ fn strip_whitespace(seq: &[u8]) -> Vec<u8> {
        .filter(|&n| *n != b'\r' && *n != b'\n')
        .map(|n| n.clone())
        .collect::<Vec<u8>>()
+}
+
+fn memchr2(b1: u8, b2: u8, seq: &[u8]) -> Option<usize> {
+    // unlike memchr::memchr2, this looks for the bytes in sequence (not either/or)
+    let mut pos = 0;
+    while true {
+        match memchr(b1, &seq[pos..]) {
+            None => return None,
+            Some(match_pos) => {
+                if pos + match_pos + 1 == seq.len() {
+                    return None;
+                } else if seq[pos + match_pos + 1] == b2 {
+                    return Some(pos + match_pos);
+                } else {
+                    pos += match_pos + 1;
+                }
+            },
+        }
+    }
+    None
 }
 
 fn fasta_record<'a>(input: &'a [u8], last: bool) -> IResult<&[u8], SeqRecord<'a>> {
@@ -344,4 +364,28 @@ fn test_quality_mask() {
     let seq_rec = ("", b"AGCT".to_vec(), Some(&b"AAA0"[..]));
     let filtered = quality_mask(seq_rec, '5' as u8);
     assert_eq!(&filtered[..], &b"AGCN"[..]);
+}
+
+
+#[test]
+fn test_wrapped_fasta() {
+    let mut i = 0;
+    fastx_bytes(&b">test\nAGCT\nTCG\n>test2\nG"[..], |seq| {
+        match i {
+            0 => {
+                assert_eq!(seq.0, "test");
+                assert_eq!(&seq.1[..], &b"AGCTTCG"[..]);
+                assert_eq!(seq.2, None);
+            },
+            1 => {
+                assert_eq!(seq.0, "test2");
+                assert_eq!(&seq.1[..], &b"G"[..]);
+                assert_eq!(seq.2, None);
+            },
+            _ => {
+                assert!(false);
+            },
+        }
+        i += 1;
+    });
 }
