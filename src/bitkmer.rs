@@ -5,6 +5,7 @@ pub struct BitNuclKmer<'a> {
     start_pos: usize,
     cur_kmer: BitKmer,
     buffer: &'a [u8],
+    canonical: bool,
 }
 
 pub fn fast_extend_kmer(kmer: &mut BitKmer, new_char: &u8) -> bool {
@@ -65,7 +66,7 @@ fn update_position(start_pos: &mut usize, kmer: &mut BitKmer, buffer: &[u8], ini
 }
 
 impl<'a> BitNuclKmer<'a> {
-    pub fn new(slice: &'a [u8], k: u8) -> BitNuclKmer<'a> {
+    pub fn new(slice: &'a [u8], k: u8, canonical: bool) -> BitNuclKmer<'a> {
         let mut kmer = (0u64, k);
         let mut start_pos = 0;
         update_position(&mut start_pos, &mut kmer, slice, true);
@@ -74,6 +75,7 @@ impl<'a> BitNuclKmer<'a> {
             start_pos: start_pos,
             cur_kmer: kmer,
             buffer: slice,
+            canonical: canonical,
         }
     }
 }
@@ -86,7 +88,11 @@ impl<'a> Iterator for BitNuclKmer<'a> {
             return None;
         }
         self.start_pos += 1;
-        Some(self.cur_kmer)
+        if self.canonical {
+            Some(canonical(self.cur_kmer))
+        } else {
+            Some(self.cur_kmer)
+        }
     }
 }
 
@@ -94,7 +100,7 @@ impl<'a> Iterator for BitNuclKmer<'a> {
 fn can_kmerize() {
     // test general function
     let mut i = 0;
-    for k in BitNuclKmer::new(b"AGCT", 1) {
+    for k in BitNuclKmer::new(b"AGCT", 1, false) {
         match i {
             0 => assert_eq!(k.0, 0b00 as BitKmerSeq),
             1 => assert_eq!(k.0, 0b10 as BitKmerSeq),
@@ -107,7 +113,7 @@ fn can_kmerize() {
 
     // test that we skip over N's
     i = 0;
-    for k in BitNuclKmer::new(b"ACNGT", 2) {
+    for k in BitNuclKmer::new(b"ACNGT", 2, false) {
         match i {
             0 => assert_eq!(k.0, 0b0001 as BitKmerSeq),
             1 => assert_eq!(k.0, 0b1011 as BitKmerSeq),
@@ -118,7 +124,7 @@ fn can_kmerize() {
 
     // test that we skip over N's and handle short kmers
     i = 0;
-    for k in BitNuclKmer::new(b"ACNG", 2) {
+    for k in BitNuclKmer::new(b"ACNG", 2, false) {
         match i {
             0 => assert_eq!(k.0, 0x0001 as BitKmerSeq),
             _ => assert!(false),
@@ -128,13 +134,26 @@ fn can_kmerize() {
 
     // test that the minimum length works
     i = 0;
-    for k in BitNuclKmer::new(b"AC", 2) {
+    for k in BitNuclKmer::new(b"AC", 2, false) {
         match i {
             0 => assert_eq!(k.0, 0x0001 as BitKmerSeq),
             _ => assert!(false),
         }
         i += 1;
     }
+}
+
+fn test_iterator() {
+    let seq = "ACGTA".as_bytes();
+    let mut kmer_iter = BitNuclKmer::new(seq, 3, false);
+    assert_eq!(kmer_iter.next(), Some((6, 3)));
+    assert_eq!(kmer_iter.next(), Some((27, 3)));
+    assert_eq!(kmer_iter.next(), Some((44, 3)));
+    assert_eq!(kmer_iter.next(), None);
+
+    let seq = "TA".as_bytes();
+    let mut kmer_iter = BitNuclKmer::new(seq, 3, false);
+    assert_eq!(kmer_iter.next(), None);
 }
 
 pub fn reverse_complement(kmer: BitKmer) -> BitKmer {
