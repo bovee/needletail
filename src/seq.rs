@@ -1,18 +1,17 @@
-use bitkmer::BitNuclKmer;
+use bitkmer::{BitNuclKmer, BitPlusNuclKmer};
 use kmer::{is_good_base, complement};
 
 
 pub struct Seq<'a> {
     seq: &'a [u8],
-    rev_seq: Vec<u8>,
+    rev_seq: Option<Vec<u8>>,
 }
 
 impl<'a> Seq<'a> {
     pub fn new(seq: &'a [u8]) -> Self {
-        let rev_seq = seq.iter().rev().map(|n| complement(n)).collect();
         Seq {
             seq: seq,
-            rev_seq: rev_seq,
+            rev_seq: None,
         }
     }
 
@@ -24,8 +23,12 @@ impl<'a> Seq<'a> {
         NuclKmer::new(self.seq, None, k)
     }
 
-    pub fn canonical_kmers(&'a self, k: u8) -> NuclKmer<'a> {
-        NuclKmer::new(self.seq, Some(&self.rev_seq), k)
+    pub fn canonical_kmers(&'a mut self, k: u8) -> NuclKmer<'a> {
+        self.rev_seq = Some(self.seq.iter().rev().map(|n| complement(n)).collect());
+        match self.rev_seq {
+            Some(ref rev_seq) => NuclKmer::new(self.seq, Some(&rev_seq), k),
+            None => NuclKmer::new(self.seq, None, k),
+        }
     }
 
     pub fn bit_kmers(&'a self, k: u8) -> BitNuclKmer<'a> {
@@ -34,6 +37,10 @@ impl<'a> Seq<'a> {
 
     pub fn canonical_bit_kmers(&'a self, k: u8) -> BitNuclKmer<'a> {
         BitNuclKmer::new(self.seq, k, true)
+    }
+
+    pub fn bit_plus_kmers(&'a self, k: u8, canonical: bool) -> BitPlusNuclKmer<'a> {
+        BitPlusNuclKmer::new(self.seq, k, canonical)
     }
 }
 

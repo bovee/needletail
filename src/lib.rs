@@ -1,14 +1,11 @@
 #![crate_name = "needletail"]
-
-#[macro_use]
-extern crate nom;
-
 extern crate memchr;
 
 pub mod fastx;
 pub mod kmer;
 pub mod bitkmer;
 pub mod seq;
+mod buffer;
 
 use std::str;
 use std::borrow::Cow;

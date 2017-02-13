@@ -49,7 +49,7 @@ pub fn complement(n: &u8) -> u8 {
     }
 }
 
-pub fn normalize<'a>(seq: &'a [u8], iupac: bool) -> Cow<'a, [u8]> {
+pub fn normalize<'a>(seq: &'a [u8], iupac: bool) -> Vec<u8> {
     //! Transform a FASTX sequence into it's "normalized" form.
     //!
     //! The normalized form is:
@@ -63,11 +63,9 @@ pub fn normalize<'a>(seq: &'a [u8], iupac: bool) -> Cow<'a, [u8]> {
     let mut original_was_bad = false;
 
     for n in seq.iter() {
-        let mut good_char = false;
         buf.push(match (*n as char, iupac) {
             c @ ('A', _) | c @ ('C', _) | c @ ('G', _) | c @ ('T', _) | c @ ('N', _) |
             c @ ('.', _) => {
-                good_char = true;
                 c.0 as u8
             },
             ('a', _) => 'A' as u8,
@@ -80,7 +78,6 @@ pub fn normalize<'a>(seq: &'a [u8], iupac: bool) -> Cow<'a, [u8]> {
             c @ ('B', true) | c @ ('D', true) | c @ ('H', true) | c @ ('V', true) |
             c @ ('R', true) | c @ ('Y', true) | c @ ('S', true) | c @ ('W', true) |
             c @ ('K', true) | c @ ('M', true) => {
-                good_char = true;
                 c.0 as u8
             },
             ('b', true) => 'B' as u8,
@@ -95,14 +92,8 @@ pub fn normalize<'a>(seq: &'a [u8], iupac: bool) -> Cow<'a, [u8]> {
             ('m', true) => 'M' as u8,
             _ => 'N' as u8,
         });
-        if !good_char {
-            original_was_bad = true;
-        }
     }
-    match original_was_bad {
-        true => Cow::Owned(buf),
-        false => Cow::Borrowed(seq),
-    }
+    buf
 }
 
 pub fn canonical<'a>(seq: &'a [u8]) -> Cow<'a, [u8]> {

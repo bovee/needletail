@@ -1,3 +1,6 @@
+use std::borrow::Cow;
+use kmer;
+
 pub type BitKmerSeq = u64;
 pub type BitKmer = (BitKmerSeq, u8);
 
@@ -6,18 +9,6 @@ pub struct BitNuclKmer<'a> {
     cur_kmer: BitKmer,
     buffer: &'a [u8],
     canonical: bool,
-}
-
-pub fn fast_extend_kmer(kmer: &mut BitKmer, new_char: &u8) -> bool {
-    // new_char must be in ACGTE (E gets counted as T unfortunately)
-    if !(new_char & 223 == 84 || new_char & 217 == 65) {
-        return false;
-    }
-    let new_kmer = (kmer.0 << 2) + (((new_char >> 2) ^ (new_char >> 1)) & 3u8) as BitKmerSeq;
-
-    // mask out any overflowed bits
-    kmer.0 = new_kmer & (BitKmerSeq::pow(2, (2 * kmer.1) as u32) - 1) as BitKmerSeq;
-    true
 }
 
 pub fn extend_kmer(kmer: &mut BitKmer, new_char: &u8) -> bool {
@@ -156,6 +147,57 @@ fn test_iterator() {
     assert_eq!(kmer_iter.next(), None);
 }
 
+pub struct BitPlusNuclKmer<'a> {
+    start_pos: usize,
+    cur_kmer: BitKmer,
+    buffer: &'a [u8],
+    canonical: bool,
+}
+
+impl<'a> BitPlusNuclKmer<'a> {
+    pub fn new(slice: &'a [u8], k: u8, canonical: bool) -> BitPlusNuclKmer<'a> {
+        let mut kmer = (0u64, k);
+        let mut start_pos = 0;
+        update_position(&mut start_pos, &mut kmer, slice, true);
+
+        BitPlusNuclKmer {
+            start_pos: start_pos,
+            cur_kmer: kmer,
+            buffer: slice,
+            canonical: canonical,
+        }
+    }
+}
+
+impl<'a> Iterator for BitPlusNuclKmer<'a> {
+    type Item = (BitKmer, Cow<'a, [u8]>);
+
+    fn next(&mut self) -> Option<(BitKmer, Cow<'a, [u8]>)> {
+        if !update_position(&mut self.start_pos, &mut self.cur_kmer, self.buffer, false) {
+            return None;
+        }
+        let start = self.start_pos;
+        let kmer = &self.buffer[start..start + self.cur_kmer.1 as usize];
+        self.start_pos += 1;
+        if self.canonical {
+            Some((canonical(self.cur_kmer), kmer::canonical(kmer)))
+        } else {
+            Some((self.cur_kmer, Cow::Borrowed(kmer)))
+        }
+    }
+}
+
+
+fn test_bitplus_iterator() {
+    let seq = "ACGTA".as_bytes();
+    let mut kmer_iter = BitPlusNuclKmer::new(seq, 3, false);
+    assert_eq!(kmer_iter.next(), Some(((6, 3), Cow::Borrowed(&b"ACG"[..]))));
+    assert_eq!(kmer_iter.next(), Some(((27, 3), Cow::Borrowed(&b"CGT"[..]))));
+    assert_eq!(kmer_iter.next(), Some(((44, 3), Cow::Borrowed(&b"GTA"[..]))));
+    assert_eq!(kmer_iter.next(), None);
+}
+
+
 pub fn reverse_complement(kmer: BitKmer) -> BitKmer {
     // FIXME: this is not going to work with BitKmers of u128 or u32
     // inspired from https://www.biostars.org/p/113640/
@@ -251,7 +293,7 @@ pub fn str_to_bitmer(kmer: &[u8]) -> BitKmer {
 
     let mut bit_kmer = (0u64, k);
     for i in 0..k {
-        fast_extend_kmer(&mut bit_kmer, &kmer[i as usize]);
+        extend_kmer(&mut bit_kmer, &kmer[i as usize]);
     }
     bit_kmer
 }
