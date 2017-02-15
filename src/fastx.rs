@@ -22,6 +22,9 @@ use memchr::{memchr, memchr2};
 
 use buffer::{RecBuffer, ParseError};
 
+#[cfg(feature = "gz")]
+use flate2::read::GzDecoder;
+
 /// A generic FASTX record containing:
 ///   seq.0 - an id
 ///   seq.1 - the sequence itself
@@ -186,20 +189,17 @@ fn fastq_record<'a>(rb: &'a mut RecBuffer) -> Result<SeqRecord<'a>, ParseError> 
 //     assert_eq!(parsed, Ok((22, res)));
 // }
 
-fn fastx_reader<'b, F, T>(reader: &'b mut T, ref mut callback: F) -> Result<(), ParseError>
+fn fastx_reader<'b, F, T>(reader: &'b mut T, first: u8, ref mut callback: F) -> Result<(), ParseError>
     where F: for<'a> FnMut(SeqRecord<'a>) -> (),
-          T: Read + Seek,
+          T: Read,
 {
-    let mut first = vec![0];
-    reader.read(&mut first)?;
-    let parser = match first[0] {
+    let mut producer = RecBuffer::new(reader, 10000000usize);
+    let parser = match first {
         b'>' => Ok(fasta_record as for<'a> fn(&'a mut RecBuffer) -> Result<SeqRecord<'a>, ParseError>),
         b'@' => Ok(fastq_record as for<'a> fn(&'a mut RecBuffer) -> Result<SeqRecord<'a>, ParseError>),
         e => Err(ParseError::Invalid(String::from("Bad starting byte"))),
     }?;
-    reader.seek(SeekFrom::Start(0));
 
-    let mut producer = RecBuffer::new(reader, 1e7 as usize);
     // TODO: replace this with some kind of futures event loop?
     loop {
         let record = parser(&mut producer);
@@ -218,16 +218,45 @@ pub fn fastx_bytes<'b, F>(bytes: &'b [u8], ref mut callback: F) -> Result<(), Pa
     //! Parse a collection of bytes into FASTX records and calls `callback` on each.
     //!
     let mut cursor = Cursor::new(bytes);
-    fastx_reader(&mut cursor, callback)
+    fastx_reader(&mut cursor, bytes[0], callback)
 }
 
 
+#[cfg(feature = "gz")]
 pub fn fastx_file<F>(filename: &str, ref mut callback: F) -> Result<(), ParseError>
     where F: for<'a> FnMut(SeqRecord<'a>) -> (),
 {
     //! Parse a file (given its name) into FASTX records and calls `callback` on each.
     let mut f = File::open(&Path::new(filename))?;
-    fastx_reader(&mut f, callback)
+
+    let mut first = vec![0];
+    f.read(&mut first)?;
+    if first[0] == 0x1F {
+        let _ = f.seek(SeekFrom::Start(0));
+        let mut gz_reader = GzDecoder::new(f)?;
+        gz_reader.read(&mut first)?;
+        // unfortunately, we can't seek back so we have to reopen everything
+        drop(gz_reader);
+        f = File::open(&Path::new(filename))?;
+        gz_reader = GzDecoder::new(f)?;
+        fastx_reader(&mut gz_reader, first[0], callback)
+    } else {
+        f.seek(SeekFrom::Start(0));
+        fastx_reader(&mut f, first[0], callback)
+    }
+}
+
+#[cfg(not(feature = "gz"))]
+pub fn fastx_file<F>(filename: &str, ref mut callback: F) -> Result<(), ParseError>
+    where F: for<'a> FnMut(SeqRecord<'a>) -> (),
+{
+    //! Parse a file (given its name) into FASTX records and calls `callback` on each.
+    let mut f = File::open(&Path::new(filename))?;
+
+    let mut first = vec![0];
+    f.read(&mut first)?;
+    let _ = f.seek(SeekFrom::Start(0));
+    fastx_reader(&mut f, first[0], callback)
 }
 
 

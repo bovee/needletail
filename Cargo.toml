@@ -3,7 +3,12 @@ name = "needletail"
 version = "0.1.0"
 authors = ["Roderick Bovee <roderick@onecodex.com>"]
 
+[features]
+default = ["gz"]
+gz = ["flate2"]
+
 [dependencies]
+flate2 = { version="0.2", optional=true }
 memchr = "0.1.11"
 
 [dev-dependencies]
