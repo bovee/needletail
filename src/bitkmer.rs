@@ -258,9 +258,9 @@ fn test_minimizer() {
     assert_eq!(minimizer((0b110001, 3), 2).0, 0b0001);
 }
 
-pub fn bitmer_to_str(kmer: BitKmer) -> String {
+pub fn bitmer_to_str(kmer: BitKmer) -> Vec<u8> {
     let mut new_kmer = kmer.0;
-    let mut new_kmer_str = String::new();
+    let mut new_kmer_str = Vec::new();
     // we're reading the bases off from the "high" end of the integer so we need to do some
     // math to figure out where they start (this helps us just pop the bases on the end
     // of the working buffer as we read them off "left to right")
@@ -271,10 +271,10 @@ pub fn bitmer_to_str(kmer: BitKmer) -> String {
         let new_char = (new_kmer & bitmask) >> offset;
         new_kmer <<= 2;
         new_kmer_str.push(match new_char {
-            0 => 'A',
-            1 => 'C',
-            2 => 'G',
-            3 => 'T',
+            0 => b'A',
+            1 => b'C',
+            2 => b'G',
+            3 => b'T',
             _ => panic!("Mathematical impossibility"),
         });
     }
@@ -283,9 +283,9 @@ pub fn bitmer_to_str(kmer: BitKmer) -> String {
 
 #[test]
 fn test_bitmer_to_str() {
-    assert_eq!(bitmer_to_str((1 as BitKmerSeq, 1)), String::from("C"));
-    assert_eq!(bitmer_to_str((60 as BitKmerSeq, 3)), String::from("TTA"));
-    assert_eq!(bitmer_to_str((0 as BitKmerSeq, 3)), String::from("AAA"));
+    assert_eq!(bitmer_to_str((1 as BitKmerSeq, 1)), b"C".to_vec());
+    assert_eq!(bitmer_to_str((60 as BitKmerSeq, 3)), b"TTA".to_vec());
+    assert_eq!(bitmer_to_str((0 as BitKmerSeq, 3)), b"AAA".to_vec());
 }
 
 pub fn str_to_bitmer(kmer: &[u8]) -> BitKmer {

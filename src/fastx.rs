@@ -18,7 +18,7 @@ use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::str;
 
-use memchr::memchr;
+use memchr::{memchr, memchr2};
 
 use buffer::{RecBuffer, ParseError};
 
@@ -29,13 +29,24 @@ use buffer::{RecBuffer, ParseError};
 pub type SeqRecord<'a> = (&'a str, Vec<u8>, Option<&'a [u8]>);
 
 fn strip_whitespace(seq: &[u8]) -> Vec<u8> {
-    seq.iter()
-       .filter(|&n| *n != b'\r' && *n != b'\n')
-       .map(|n| n.clone())
-       .collect::<Vec<u8>>()
+    let mut new_buf = Vec::with_capacity(seq.len());
+    let mut i = 0;
+    while i < seq.len() {
+        match memchr2(b'\r', b'\n', &seq[i..]) {
+            None => {
+                new_buf.extend_from_slice(&seq[i..]);
+                break;
+            },
+            Some(match_pos) => {
+                new_buf.extend_from_slice(&seq[i..i + match_pos]);
+                i += match_pos + 1;
+            },
+        }
+    }
+    new_buf
 }
 
-fn memchr2(b1: u8, b2: u8, seq: &[u8]) -> Option<usize> {
+fn memchr_both(b1: u8, b2: u8, seq: &[u8]) -> Option<usize> {
     // unlike memchr::memchr2, this looks for the bytes in sequence (not either/or)
     let mut pos = 0;
     while true {
@@ -67,7 +78,7 @@ fn fasta_record<'a>(rb: &'a mut RecBuffer) -> Result<SeqRecord<'a>, ParseError> 
     })?;
 
     let _ = rb.mark_field(|buf: &[u8], eof: bool| {
-        match memchr2(b'\n', b'>', &buf) {
+        match memchr_both(b'\n', b'>', &buf) {
             None => match eof {
                 false => Err(ParseError::NeedMore),
                 true => Ok(buf.len()),
@@ -109,7 +120,7 @@ fn fastq_record<'a>(rb: &'a mut RecBuffer) -> Result<SeqRecord<'a>, ParseError> 
     })?;
 
     let seq_len = rb.mark_field(|buf: &[u8], eof: bool| {
-        match memchr2(b'\n', b'+', &buf) {
+        match memchr_both(b'\n', b'+', &buf) {
             None => Err(ParseError::NeedMore),
             Some(pos_end) => Ok(pos_end + 1),
         }
