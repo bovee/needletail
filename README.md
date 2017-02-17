@@ -1,3 +1,7 @@
+# OLDER VERSION
+
+This is an older, unmaintained version of Needletail. Please find the current version [here](https://github.com/onecodex/needletail).
+
 # Needletail
 
 Needletail is a MIT licensed, minimal-copying FASTA/FASTQ parser and k-mer processing library.
